@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "claudeverse"
+version = "1.0.0"
+description = "Claude Code switches to your next account by itself when it hits the usage limit. Open sessions move along without a restart and continue where they stopped."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Environment :: Console",
+]
+
+[project.scripts]
+claudeverse = "claudeverse.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
