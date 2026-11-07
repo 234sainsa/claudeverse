@@ -92,6 +92,56 @@ class SignalTests(Base):
         data = json.loads(out.getvalue())
         self.assertEqual(data["hookSpecificOutput"]["watchPaths"], [str(switch_signal.path())])
 
+    def test_switch_starts_after_switch_on_windows(self):
+        # Claude Code does not always run the FileChanged hook: every switch types by itself too.
+        with mock.patch("claudeverse.switching.IS_WIN", True):
+            self.quiet(commands.cmd_use, "a")
+            self.quiet(commands.cmd_use, "a")  # no change: nothing to type
+        self.assertEqual(self.started, ["after-switch"])
+        with mock.patch("claudeverse.switching.IS_WIN", False):
+            self.quiet(commands.cmd_use, "b")
+        self.assertEqual(self.started, ["after-switch"])
+
+
+@unittest.skipUnless(os.name == "nt", "typing into sessions is Windows only")
+class AfterSwitchTypingTests(Base):
+    def setUp(self):
+        super().setUp()
+        from claudeverse import session_typing, win_console
+        self.session_typing, self.win_console = session_typing, win_console
+        self.typed = []
+        for name, fake in {
+            "type_one": lambda pid, text, *a, **k: self.typed.append((pid, text)) or True,
+            "limit_wait_on_screen": lambda pid: False,
+            "remote_control_asked_retry": lambda pid, deadline: False,
+        }.items():
+            p = mock.patch.object(session_typing, name, fake)
+            p.start()
+            self.addCleanup(p.stop)
+        self.sig = {"seq": 3, "at": 1000, "from": "a", "to": "b", "why": "manual"}
+
+    def test_each_session_is_typed_into_once_per_switch(self):
+        # The FileChanged hook and `after-switch` can both reach the same session.
+        after_switch.type_into(11, self.sig, "s1")
+        after_switch.type_into(11, self.sig, "s1")
+        after_switch.type_into(12, self.sig, "s2")
+        after_switch.type_into(11, dict(self.sig, seq=4), "s1")
+        self.assertEqual(self.typed, [(11, "/remote-control"), (12, "/remote-control"), (11, "/remote-control")])
+
+    def test_only_sessions_from_before_the_switch(self):
+        files.write_json(switch_signal.path(), self.sig)
+        with mock.patch.object(self.win_console, "session_pids", lambda: [11, 12, 13]), \
+                mock.patch.object(self.win_console, "started_at", {11: 900.0, 12: 1005.0, 13: None}.get):
+            after_switch.type_into_all()
+        self.assertEqual(self.started, ["after-switch --pid 11", "after-switch --pid 13"])
+
+    def test_a_probe_is_not_a_switch(self):
+        files.write_json(switch_signal.path(), dict(self.sig, probe=True))
+        with mock.patch.object(self.win_console, "session_pids", lambda: [11]):
+            after_switch.type_into_all()
+            after_switch.type_into_one(11)
+        self.assertEqual((self.started, self.typed), ([], []))
+
 
 class ScreenAndTranscriptTests(unittest.TestCase):
     RULE = "─" * 40

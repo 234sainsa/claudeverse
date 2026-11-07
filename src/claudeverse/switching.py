@@ -2,7 +2,7 @@
 """
 from __future__ import annotations
 
-from . import Error, claude_settings, credentials, files, profiles, switch_signal
+from . import IS_WIN, Error, background, claude_settings, credentials, files, profiles, switch_signal
 
 
 def switch_to(name: str, why: str = "manual") -> None:
@@ -21,3 +21,8 @@ def switch_to(name: str, why: str = "manual") -> None:
     files.log_event(f"switch to={name} why={why}")
     if before != name:
         switch_signal.announce(before, name, why)
+        if IS_WIN:
+            # Type the on-switch commands into the running sessions (`after-switch`). The FileChanged
+            # hook on switched.json is not enough: Claude Code does not always run it (2.1.319 ran it
+            # in no session), and then nothing reconnected Remote Control.
+            background.start("after-switch")

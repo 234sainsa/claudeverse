@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from . import Error, VERSION, commands, hooks, setup_menu, statusline, watcher
+from . import IS_WIN, Error, VERSION, after_switch, commands, hooks, setup_menu, statusline, watcher
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -49,6 +49,9 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("auto-check", help=argparse.SUPPRESS)
     sub.add_parser("hook-session-start", help=argparse.SUPPRESS)
     sub.add_parser("hook-switched", help=argparse.SUPPRESS)
+    # Run by claudeverse itself, in the background after a switch (Windows).
+    x = sub.add_parser("after-switch", help=argparse.SUPPRESS)
+    x.add_argument("--pid", type=int)
     return p
 
 
@@ -95,6 +98,13 @@ def run(a: argparse.Namespace) -> int:
         return hooks.session_start()
     elif a.cmd == "hook-switched":
         return hooks.switched()
+    elif a.cmd == "after-switch":
+        if not IS_WIN:
+            return 0
+        if a.pid:
+            after_switch.type_into_one(a.pid)
+        else:
+            after_switch.type_into_all()
     return 0
 
 

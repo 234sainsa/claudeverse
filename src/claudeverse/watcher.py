@@ -6,10 +6,9 @@ tells claudeverse about it, and the status line does not run again while it wait
 """
 from __future__ import annotations
 
-import subprocess
 import time
 
-from . import Error, IS_WIN, auto_switch, files, paths, state
+from . import Error, auto_switch, background, files, state
 
 WATCH_FROM = 90.0      # percent: the status line starts the watcher when the account in use is this high
 WATCH_EVERY = 60       # seconds between two usage checks of the watcher
@@ -18,17 +17,7 @@ WATCH_FOR = 30 * 60    # seconds the watcher keeps going after the status line l
 
 def start() -> None:
     """Run the watcher (`claudeverse auto-check`) in the background."""
-    cmd = f"{paths.self_command()} auto-check"
-    kw = dict(shell=True, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    if not IS_WIN:
-        subprocess.Popen(cmd, start_new_session=True, **kw)
-        return
-    no_window, new_group, breakaway = 0x08000000, 0x00000200, 0x01000000
-    try:
-        # Out of Claude Code's job, so it keeps running after the status line command ends.
-        subprocess.Popen(cmd, creationflags=no_window | new_group | breakaway, **kw)
-    except OSError:
-        subprocess.Popen(cmd, creationflags=no_window | new_group, **kw)
+    background.start("auto-check")
 
 
 def watch_if_near_limit(windows) -> None:

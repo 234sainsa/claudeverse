@@ -64,8 +64,13 @@ _k32.Process32FirstW.argtypes = [wintypes.HANDLE, ctypes.POINTER(_PROCESSENTRY32
 _k32.Process32NextW.argtypes = [wintypes.HANDLE, ctypes.POINTER(_PROCESSENTRY32W)]
 
 
-def find_claude_pid():
-    """The claude.exe that runs this hook: the nearest claude.exe among our parent processes."""
+_k32.OpenProcess.restype = wintypes.HANDLE
+_k32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+_k32.GetProcessTimes.argtypes = [wintypes.HANDLE] + [ctypes.POINTER(wintypes.FILETIME)] * 4
+
+
+def _process_table() -> dict:
+    """{pid: (parent pid, exe name in lower case)} of every running process."""
     snap = _k32.CreateToolhelp32Snapshot(0x2, 0)
     table = {}
     try:
@@ -77,15 +82,58 @@ def find_claude_pid():
             ok = _k32.Process32NextW(snap, ctypes.byref(entry))
     finally:
         _k32.CloseHandle(snap)
-    pid = os.getpid()
+    return table
+
+
+def _claude_ancestor(table: dict, pid: int):
+    """The nearest claude.exe among the parent processes of `pid` (not `pid` itself), or None."""
     for _ in range(30):
-        parent, name = table.get(pid, (0, ""))
-        if name == "claude.exe" and pid != os.getpid():
-            return pid
+        parent, _name = table.get(pid, (0, ""))
         if not parent or parent == pid:
             return None
+        if table.get(parent, (0, ""))[1] == "claude.exe":
+            return parent
         pid = parent
     return None
+
+
+def find_claude_pid():
+    """The claude.exe that runs this hook: the nearest claude.exe among our parent processes."""
+    return _claude_ancestor(_process_table(), os.getpid())
+
+
+def session_pids() -> list:
+    """The claude.exe processes that are Claude Code sessions in a console window.
+
+    A claude.exe started by another claude.exe (a command a session runs) shares that session's
+    console, and processes without a console (the desktop app) cannot be typed into: both are left out."""
+    table = _process_table()
+    found = [pid for pid, (_parent, name) in table.items()
+             if name == "claude.exe" and _claude_ancestor(table, pid) is None]
+    return sorted(pid for pid in found if has_console(pid))
+
+
+def has_console(pid: int) -> bool:
+    try:
+        with _AttachedConsole(pid):
+            return True
+    except OSError:
+        return False
+
+
+def started_at(pid: int):
+    """When process `pid` started (Unix time), or None when that cannot be read."""
+    h = _k32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+    if not h:
+        return None
+    try:
+        times = [wintypes.FILETIME() for _ in range(4)]
+        if not _k32.GetProcessTimes(h, *[ctypes.byref(t) for t in times]):
+            return None
+        ticks = (times[0].dwHighDateTime << 32) | times[0].dwLowDateTime  # 100 ns since 1601
+        return ticks / 1e7 - 11644473600
+    finally:
+        _k32.CloseHandle(h)
 
 
 class _AttachedConsole:

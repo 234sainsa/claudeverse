@@ -53,8 +53,9 @@ def switched() -> int:
     """FileChanged hook for switched.json (async).
 
     Windows: types the configured commands into this session (default /remote-control), and
-    "continue" when it had stopped at a usage limit. Elsewhere: exit code 2 (asyncRewake) tells the
-    model, which then tells the user."""
+    "continue" when it had stopped at a usage limit, unless `after-switch` did it already (Claude
+    Code does not always run this hook, so every switch also starts `after-switch`). Elsewhere:
+    exit code 2 (asyncRewake) tells the model, which then tells the user."""
     raw = sys.stdin.read()
     try:
         data = json.loads(raw) if raw.strip() else {}

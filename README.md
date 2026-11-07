@@ -56,7 +56,7 @@ You do not need these for the automatic switch.
 
 Running sessions use the new login from their next request. No restart needed.
 
-On Windows, claudeverse also types into each running session:
+On Windows, claudeverse also types into each session that was running before the switch (right after the switch, in the background; each step is written to `~/.claudeverse/events.log`):
 
 - `/remote-control` (Remote Control disconnects when the account changes).
 - If the session had stopped at the usage limit: a message asking Claude to continue and to restart subagents that stopped. Only this message reaches Claude.

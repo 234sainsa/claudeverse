@@ -16,7 +16,7 @@ from pathlib import Path
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
-from claudeverse import credentials, files, watcher  # noqa: E402
+from claudeverse import background, credentials, files, watcher  # noqa: E402
 
 
 def oauth(tag, exp_hours=8):
@@ -55,6 +55,12 @@ class Base(unittest.TestCase):
         no_watcher = mock.patch.object(watcher, "start", lambda: None)
         no_watcher.start()
         self.addCleanup(no_watcher.stop)
+        # Never start any other background command either (a switch starts `after-switch` on
+        # Windows): record it in self.started instead.
+        self.started = []
+        no_background = mock.patch.object(background, "start", self.started.append)
+        no_background.start()
+        self.addCleanup(no_background.stop)
         # Never ask Anthropic: a test that does fails loudly.
         offline = mock.patch("urllib.request.urlopen", no_network)
         offline.start()
